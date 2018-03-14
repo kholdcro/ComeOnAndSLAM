@@ -56,7 +56,10 @@ void Viewer::Run()
     mbFinished = false;
     mbStopped = false;
 
-    pangolin::CreateWindowAndBind("ORB-SLAM2: Map Viewer",1024,768);
+    int mImageHeight_bar = mImageHeight+20;
+    int pangoWidth = 1024;
+
+    pangolin::CreateWindowAndBind("ORB-SLAM2: Map Viewer",pangoWidth,mImageHeight_bar);
 
     // 3D Mouse handler requires depth testing to be enabled
     glEnable(GL_DEPTH_TEST);
@@ -75,13 +78,13 @@ void Viewer::Run()
 
     // Define Camera Render Object (for view / scene browsing)
     pangolin::OpenGlRenderState s_cam(
-                pangolin::ProjectionMatrix(1024,768,mViewpointF,mViewpointF,512,389,0.1,1000),
+                pangolin::ProjectionMatrix(pangoWidth,mImageHeight_bar,mViewpointF,mViewpointF,512,389,0.1,1000),
                 pangolin::ModelViewLookAt(mViewpointX,mViewpointY,mViewpointZ, 0,0,0,0.0,-1.0, 0.0)
                 );
 
     // Add named OpenGL viewport to window and provide 3D Handler
     pangolin::View& d_cam = pangolin::CreateDisplay()
-            .SetBounds(0.0, 1.0, pangolin::Attach::Pix(175), 1.0, -1024.0f/768.0f)
+            .SetBounds(0.0, 1.0, pangolin::Attach::Pix(175), 1.0, -float(pangoWidth)/float(mImageHeight_bar))
             .SetHandler(new pangolin::Handler3D(s_cam));
 
     pangolin::OpenGlMatrix Twc;
@@ -91,6 +94,13 @@ void Viewer::Run()
 
     bool bFollow = true;
     bool bLocalizationMode = false;
+
+    cout << 1e3/mT << endl;
+
+    // Save Video ---------------------------------------------------------------------------------
+    cv::VideoWriter video("sampleViewer.avi",CV_FOURCC('M','J','P','G'),1e3/mT, cv::Size(mImageWidth+pangoWidth-1,mImageHeight_bar),true);
+    // Save Video ---------------------------------------------------------------------------------
+
 
     while(1)
     {
@@ -132,10 +142,25 @@ void Viewer::Run()
         if(menuShowPoints)
             mpMapDrawer->DrawMapPoints();
 
+        // Get CV matrix from image
+        pangolin::Image<unsigned char> buffer;
+        pangolin::PixelFormat fmt = pangolin::PixelFormatFromString("RGBA32");
+        buffer.Alloc(d_cam.v.w, d_cam.v.h, d_cam.v.w * fmt.bpp/8 );
+        glReadBuffer(GL_BACK);
+        glPixelStorei(GL_PACK_ALIGNMENT, 1);
+        glReadPixels(d_cam.v.l, d_cam.v.b, d_cam.v.w, d_cam.v.h, GL_RGBA, GL_UNSIGNED_BYTE, buffer.ptr );
+        cv::Mat pointImg, imgBuffer = cv::Mat(d_cam.v.h, d_cam.v.w, CV_8UC4, buffer.ptr);
+        cv::cvtColor(imgBuffer, pointImg,  cv::COLOR_RGBA2BGR);
+
+        //Clean Things
         pangolin::FinishFrame();
 
         cv::Mat im = mpFrameDrawer->DrawFrame();
+        cv::Mat combi;
+        hconcat(pointImg,im,combi);
         cv::imshow("ORB-SLAM2: Current Frame",im);
+
+        video.write(combi);
         cv::waitKey(mT);
 
         if(menuReset)

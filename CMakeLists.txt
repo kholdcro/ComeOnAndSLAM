@@ -111,3 +111,9 @@ add_executable(mono_euroc
 Examples/Monocular/mono_euroc.cc)
 target_link_libraries(mono_euroc ${PROJECT_NAME})
 
+
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/Fisheye)
+
+add_executable(widefisheye
+Fisheye/widefisheye.cc)
+target_link_libraries(widefisheye ${PROJECT_NAME})
