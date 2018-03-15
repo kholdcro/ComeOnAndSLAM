@@ -307,8 +307,8 @@ bool Frame::isInFrustum(MapPoint *pMP, float viewingCosLimit)
 
     const float viewCos = PO.dot(Pn)/dist;
 
-    if(viewCos<viewingCosLimit)
-        return false;
+    // if(viewCos<viewingCosLimit)
+    //     return false;
 
     // Predict scale in the image
     const int nPredictedLevel = pMP->PredictScale(dist,this);

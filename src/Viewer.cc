@@ -56,10 +56,37 @@ void Viewer::Run()
     mbFinished = false;
     mbStopped = false;
 
-    int mImageHeight_bar = mImageHeight+20;
-    int pangoWidth = 1024;
+    int mImageHeight_bar = int(mImageHeight);
+    int pangoWidth = int(mImageWidth);
+    bool useBlack = false;
+    cv::Mat bottomCorn;
 
-    pangolin::CreateWindowAndBind("ORB-SLAM2: Map Viewer",pangoWidth,mImageHeight_bar);
+    if (mImageHeight*mImageWidth > 1000*1000)
+    {
+        mImageHeight_bar = mImageHeight/2;
+        pangoWidth = mImageWidth/2;
+        useBlack = true;
+        
+        bottomCorn = cv::imread("basketball.jpg", cv::IMREAD_COLOR); // Read the file
+        if( bottomCorn.empty() )                      // Check for invalid input
+        {
+            cout <<  "Could not open or find the image" << std::endl ;
+            cv::Mat black(mImageHeight_bar, pangoWidth, CV_8UC3, cv::Scalar(0,0,0));
+            bottomCorn = black;
+        }
+        else
+        {
+            cv:: resize(bottomCorn, bottomCorn, cv::Size(pangoWidth, mImageHeight_bar));
+            cout << "Image Found!" << endl;
+        }
+    }
+    else
+    {
+        cv::Mat black;
+    }
+
+
+    pangolin::CreateWindowAndBind("ORB-SLAM2: Map Viewer",pangoWidth,mImageHeight_bar+20);
 
     // 3D Mouse handler requires depth testing to be enabled
     glEnable(GL_DEPTH_TEST);
@@ -78,13 +105,13 @@ void Viewer::Run()
 
     // Define Camera Render Object (for view / scene browsing)
     pangolin::OpenGlRenderState s_cam(
-                pangolin::ProjectionMatrix(pangoWidth,mImageHeight_bar,mViewpointF,mViewpointF,512,389,0.1,1000),
+                pangolin::ProjectionMatrix(pangoWidth,mImageHeight_bar,mViewpointF,mViewpointF,pangoWidth/2,mImageHeight_bar/2,0.1,1000),
                 pangolin::ModelViewLookAt(mViewpointX,mViewpointY,mViewpointZ, 0,0,0,0.0,-1.0, 0.0)
                 );
 
     // Add named OpenGL viewport to window and provide 3D Handler
     pangolin::View& d_cam = pangolin::CreateDisplay()
-            .SetBounds(0.0, 1.0, pangolin::Attach::Pix(175), 1.0, -float(pangoWidth)/float(mImageHeight_bar))
+            .SetBounds(0.0, 1.0, pangolin::Attach::Pix(175), 1.0, -float(pangoWidth)/float(mImageHeight_bar+20))
             .SetHandler(new pangolin::Handler3D(s_cam));
 
     pangolin::OpenGlMatrix Twc;
@@ -95,10 +122,8 @@ void Viewer::Run()
     bool bFollow = true;
     bool bLocalizationMode = false;
 
-    cout << 1e3/mT << endl;
-
     // Save Video ---------------------------------------------------------------------------------
-    cv::VideoWriter video("sampleViewer.avi",CV_FOURCC('M','J','P','G'),1e3/mT, cv::Size(mImageWidth+pangoWidth-1,mImageHeight_bar),true);
+    cv::VideoWriter video("sampleViewer.avi",CV_FOURCC('M','J','P','G'),1e3/mT, cv::Size(mImageWidth+pangoWidth,mImageHeight+20),true);
     // Save Video ---------------------------------------------------------------------------------
 
 
@@ -157,7 +182,27 @@ void Viewer::Run()
 
         cv::Mat im = mpFrameDrawer->DrawFrame();
         cv::Mat combi;
-        hconcat(pointImg,im,combi);
+        cv:: Mat flipPoint;
+        cv::flip(pointImg, flipPoint, 0);
+
+        if(im.rows != mImageHeight+20)
+        {
+             cv::Mat temp(mImageHeight+20, mImageWidth, CV_8UC3, cv::Scalar(0,0,0));
+             im = temp;
+             cout << "Image not rendered" << endl;
+        }
+
+        if(useBlack)
+        {
+            cv::Mat tmp;
+            cv::vconcat(flipPoint,bottomCorn,tmp);
+            hconcat(tmp,im,combi);
+        }
+        else
+        {
+            hconcat(flipPoint,im,combi);
+        }
+
         cv::imshow("ORB-SLAM2: Current Frame",im);
 
         video.write(combi);

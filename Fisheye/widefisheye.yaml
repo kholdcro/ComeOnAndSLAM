@@ -18,6 +18,8 @@ Camera.k3: -0.001036
 
 # Camera frames per second 
 Camera.fps: 30.0
+Camera.width: 1920
+Camera.height: 1920
 
 # Color order of the images (0: BGR, 1: RGB. It is ignored if images are grayscale)
 Camera.RGB: 1
@@ -53,6 +55,8 @@ Viewer.CameraSize: 0.15
 Viewer.CameraLineWidth: 2
 Viewer.ViewpointX: 0
 Viewer.ViewpointY: -10
-Viewer.ViewpointZ: -0.1
+# Viewer.ViewpointZ: -0.1
+Viewer.ViewpointZ: -5
+# Viewer.ViewpointF: 2000
 Viewer.ViewpointF: 2000
 
