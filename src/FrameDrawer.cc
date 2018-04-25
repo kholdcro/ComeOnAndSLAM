@@ -77,6 +77,11 @@ cv::Mat FrameDrawer::DrawFrame()
     //Draw
     if(state==Tracking::NOT_INITIALIZED) //INITIALIZING
     {
+        const int n = vCurrentKeys.size();
+        for(int i=0;i<n;i++)
+        {       
+            cv::circle(im,vCurrentKeys[i].pt,1,cv::Scalar(0,0,255),-1);
+        }
         for(unsigned int i=0; i<vMatches.size(); i++)
         {
             if(vMatches[i]>=0)
@@ -84,7 +89,7 @@ cv::Mat FrameDrawer::DrawFrame()
                 cv::line(im,vIniKeys[i].pt,vCurrentKeys[vMatches[i]].pt,
                         cv::Scalar(0,255,0));
             }
-        }        
+        }
     }
     else if(state==Tracking::OK) //TRACKING
     {

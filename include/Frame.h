@@ -57,6 +57,9 @@ public:
     // Constructor for Monocular cameras.
     Frame(const cv::Mat &imGray, const double &timeStamp, ORBextractor* extractor,ORBVocabulary* voc, cv::Mat &K, cv::Mat &distCoef, const float &bf, const float &thDepth);
 
+    // Constructor for Fisheye cameras (kind-of).
+    Frame(const cv::Mat &imGray, const double &timeStamp, ORBextractor* extractor,ORBVocabulary* voc, cv::Mat &K, cv::Mat &n_K, cv::Mat &distCoef, const float &bf, const float &thDepth, const int &mSensor);    
+
     // Extract ORB on the image. 0 for left image and 1 for right image.
     void ExtractORB(int flag, const cv::Mat &im);
 
@@ -110,6 +113,7 @@ public:
 
     // Calibration matrix and OpenCV distortion parameters.
     cv::Mat mK;
+    cv::Mat n_mK;
     static float fx;
     static float fy;
     static float cx;
@@ -194,18 +198,25 @@ private:
     // Only for the RGB-D case. Stereo must be already rectified!
     // (called in the constructor).
     void UndistortKeyPoints();
+    void UndistortFisheyeKeyPoints();
 
     // Computes image bounds for the undistorted image (called in the constructor).
     void ComputeImageBounds(const cv::Mat &imLeft);
+    void ComputeFisheyeImageBounds(const cv::Mat &imLeft);
 
     // Assign keypoints to the grid for speed up feature matching (called in the constructor).
     void AssignFeaturesToGrid();
+
+    // void undistortFish(std::vector<cv::KeyPoint> distorted, std::vector<cv::KeyPoint>& undistorted, cv::Mat K, cv::Mat D, cv::Mat R, cv::Mat P);
+    void undistortFish(cv::InputArray distorted, cv::OutputArray& undistorted, cv::Mat K, cv::Mat D);
 
     // Rotation, translation and camera center
     cv::Mat mRcw;
     cv::Mat mtcw;
     cv::Mat mRwc;
     cv::Mat mOw; //==mtwc
+
+    float maxPixel = 906;
 };
 
 }// namespace ORB_SLAM

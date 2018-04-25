@@ -38,7 +38,7 @@ Frame::Frame()
 //Copy Constructor
 Frame::Frame(const Frame &frame)
     :mpORBvocabulary(frame.mpORBvocabulary), mpORBextractorLeft(frame.mpORBextractorLeft), mpORBextractorRight(frame.mpORBextractorRight),
-     mTimeStamp(frame.mTimeStamp), mK(frame.mK.clone()), mDistCoef(frame.mDistCoef.clone()),
+     mTimeStamp(frame.mTimeStamp), mK(frame.mK.clone()), n_mK(frame.n_mK.clone()), mDistCoef(frame.mDistCoef.clone()),
      mbf(frame.mbf), mb(frame.mb), mThDepth(frame.mThDepth), N(frame.N), mvKeys(frame.mvKeys),
      mvKeysRight(frame.mvKeysRight), mvKeysUn(frame.mvKeysUn),  mvuRight(frame.mvuRight),
      mvDepth(frame.mvDepth), mBowVec(frame.mBowVec), mFeatVec(frame.mFeatVec),
@@ -170,7 +170,7 @@ Frame::Frame(const cv::Mat &imGray, const cv::Mat &imDepth, const double &timeSt
     AssignFeaturesToGrid();
 }
 
-
+//Monocular Case
 Frame::Frame(const cv::Mat &imGray, const double &timeStamp, ORBextractor* extractor,ORBVocabulary* voc, cv::Mat &K, cv::Mat &distCoef, const float &bf, const float &thDepth)
     :mpORBvocabulary(voc),mpORBextractorLeft(extractor),mpORBextractorRight(static_cast<ORBextractor*>(NULL)),
      mTimeStamp(timeStamp), mK(K.clone()),mDistCoef(distCoef.clone()), mbf(bf), mThDepth(thDepth)
@@ -218,6 +218,73 @@ Frame::Frame(const cv::Mat &imGray, const double &timeStamp, ORBextractor* extra
         cy = K.at<float>(1,2);
         invfx = 1.0f/fx;
         invfy = 1.0f/fy;
+
+        mbInitialComputations=false;
+    }
+
+    mb = mbf/fx;
+
+    AssignFeaturesToGrid();
+}
+
+//Fisheye/funky constructor case
+Frame::Frame(const cv::Mat &imGray, const double &timeStamp, ORBextractor* extractor,ORBVocabulary* voc, cv::Mat &K, cv::Mat &n_K, cv::Mat &distCoef, const float &bf, const float &thDepth, const int &mSensor)
+    :mpORBvocabulary(voc),mpORBextractorLeft(extractor),mpORBextractorRight(static_cast<ORBextractor*>(NULL)),
+     mTimeStamp(timeStamp), mK(K.clone()), n_mK(n_K.clone()),mDistCoef(distCoef.clone()), mbf(bf), mThDepth(thDepth)
+{
+    // Frame ID
+    mnId=nNextId++;
+
+    // Scale Level Info
+    mnScaleLevels = mpORBextractorLeft->GetLevels();
+    mfScaleFactor = mpORBextractorLeft->GetScaleFactor();
+    mfLogScaleFactor = log(mfScaleFactor);
+    mvScaleFactors = mpORBextractorLeft->GetScaleFactors();
+    mvInvScaleFactors = mpORBextractorLeft->GetInverseScaleFactors();
+    mvLevelSigma2 = mpORBextractorLeft->GetScaleSigmaSquares();
+    mvInvLevelSigma2 = mpORBextractorLeft->GetInverseScaleSigmaSquares();
+
+    // ORB extraction
+    ExtractORB(0,imGray);
+
+    N = mvKeys.size();
+
+    if(mvKeys.empty())
+        return;
+
+    if(mSensor == 3)
+    {
+        UndistortFisheyeKeyPoints();
+    }
+    else
+        UndistortKeyPoints();
+
+    // Set no stereo information
+    mvuRight = vector<float>(N,-1);
+    mvDepth = vector<float>(N,-1);
+
+    mvpMapPoints = vector<MapPoint*>(N,static_cast<MapPoint*>(NULL));
+    mvbOutlier = vector<bool>(N,false);
+
+    // This is done only for the first Frame (or after a change in the calibration)
+    if(mbInitialComputations)
+    {
+        fx = K.at<float>(0,0);
+        fy = K.at<float>(1,1);
+        cx = K.at<float>(0,2);
+        cy = K.at<float>(1,2);
+        invfx = 1.0f/fx;
+        invfy = 1.0f/fy;
+
+        if(mSensor == 3)
+            ComputeFisheyeImageBounds(imGray);
+        else
+            ComputeImageBounds(imGray);
+        
+
+        mfGridElementWidthInv=static_cast<float>(FRAME_GRID_COLS)/static_cast<float>(mnMaxX-mnMinX);
+        mfGridElementHeightInv=static_cast<float>(FRAME_GRID_ROWS)/static_cast<float>(mnMaxY-mnMinY);
+
 
         mbInitialComputations=false;
     }
@@ -279,6 +346,9 @@ bool Frame::isInFrustum(MapPoint *pMP, float viewingCosLimit)
     const float &PcY= Pc.at<float>(1);
     const float &PcZ = Pc.at<float>(2);
 
+    // cout << "PcZ " << PcZ << endl;
+    // cout << "mnMinX " << mnMinX << endl;
+
     // Check positive depth
     if(PcZ<0.0f)
         return false;
@@ -287,6 +357,8 @@ bool Frame::isInFrustum(MapPoint *pMP, float viewingCosLimit)
     const float invz = 1.0f/PcZ;
     const float u=fx*PcX*invz+cx;
     const float v=fy*PcY*invz+cy;
+
+    // cout << "u " << u << endl;
 
     if(u<mnMinX || u>mnMaxX)
         return false;
@@ -461,7 +533,119 @@ void Frame::ComputeImageBounds(const cv::Mat &imLeft)
         mnMinY = 0.0f;
         mnMaxY = imLeft.rows;
     }
+    cout << "Limits: " << endl;
+    cout << "[" << mnMinX << ", " << mnMinY << "] "
+         << "[" << mnMaxX << ", " << mnMaxY << "]" << endl;
 }
+
+
+void Frame::UndistortFisheyeKeyPoints()
+{
+    if(mDistCoef.at<float>(0)==0.0)
+    {
+        mvKeysUn=mvKeys;
+        return;
+    }
+
+    // Fill matrix with points
+    cv::Mat mat(N,2,CV_32F);
+    for(int i=0; i<N; i++)
+    {
+        mat.at<float>(i,0)=mvKeys[i].pt.x;
+        mat.at<float>(i,1)=mvKeys[i].pt.y;
+    }
+
+    // Undistort points
+    mat=mat.reshape(2);
+    // cv::fisheye::undistortPoints(mat,mat,mK,mDistCoef,cv::Mat(),n_mK);
+    // cout << "mat: " << mat << endl;
+    // cv::fisheye::undistortPoints(mat,mat,mK,mDistCoef,cv::Mat(),mK);
+    undistortFish(mat,mat,mK,mDistCoef);
+    // cout << "after: " << mat << endl;
+    mat=mat.reshape(1);
+
+    // Fill undistorted keypoint vector
+    mvKeysUn.resize(N);
+    for(int i=0; i<N; i++)
+    {
+        cv::KeyPoint kp = mvKeys[i];
+        kp.pt.x=mat.at<float>(i,0);
+        kp.pt.y=mat.at<float>(i,1);
+        mvKeysUn[i]=kp;
+    }
+    // cout << "mvKeysUn: " << mat << endl;
+}
+
+void Frame::ComputeFisheyeImageBounds(const cv::Mat &imLeft)
+{
+    if(mDistCoef.at<float>(0)!=0.0)
+    {
+        cv::Mat mat(4,2,CV_32F);
+        // mat.at<float>(0,0)=0.0; mat.at<float>(0,1)=0.0;
+        // mat.at<float>(1,0)=imLeft.cols; mat.at<float>(1,1)=0.0;
+        // mat.at<float>(2,0)=0.0; mat.at<float>(2,1)=imLeft.rows;
+        // mat.at<float>(3,0)=imLeft.cols; mat.at<float>(3,1)=imLeft.rows;
+
+        float hw = imLeft.rows/2.;
+        float hh = imLeft.cols/2.;
+        float diff = imLeft.rows - maxPixel;
+
+        mat.at<float>(0,0)=diff; mat.at<float>(0,1)=hh;
+        mat.at<float>(1,0)=hw; mat.at<float>(1,1)=imLeft.rows-diff;
+        mat.at<float>(2,0)=imLeft.cols-diff; mat.at<float>(2,1)=hh;
+        mat.at<float>(3,0)=hw; mat.at<float>(3,1)=diff;
+
+        cout << "mk: " << endl << mK << endl;
+        cout << "n_mK: " << endl << n_mK << endl;
+        cout << "mDistCoef: " << mDistCoef << endl;
+        // Undistort corners
+        mat=mat.reshape(2);
+        cout << "Before " << endl << mat << endl;
+        // cv::fisheye::undistortPoints(mat,mat,mK,mDistCoef,cv::Mat(),n_mK);
+        // cv::fisheye::undistortPoints(mat,mat,mK,mDistCoef,cv::Mat(),mK);
+        undistortFish(mat,mat,mK,mDistCoef);
+        // cv::fisheye::undistortPoints(mat,mat,mK,mDistCoef,cv::Mat::eye(3,3,CV_32F),mK);
+        cout << "After: " << endl << mat << endl;
+        mat=mat.reshape(1);
+        cout << "After: " << endl << mat << endl;
+
+        // mnMinX = min(mat.at<float>(0,0),mat.at<float>(2,0));
+        // mnMaxX = max(mat.at<float>(1,0),mat.at<float>(3,0));
+        // mnMinY = min(mat.at<float>(0,1),mat.at<float>(1,1));
+        // mnMaxY = max(mat.at<float>(2,1),mat.at<float>(3,1));
+
+        mnMinX = mat.at<float>(0,0);
+        mnMaxX = mat.at<float>(2,0);
+        mnMinY = mat.at<float>(3,1);
+        mnMaxY = mat.at<float>(1,1);
+
+    }
+    else
+    {
+        mnMinX = 0.0f;
+        mnMaxX = imLeft.cols;
+        mnMinY = 0.0f;
+        mnMaxY = imLeft.rows;
+    }
+
+    cout << "Limits: " << endl;
+    cout << "[" << mnMinX << ", " << mnMaxX << "] "
+         << "[" << mnMinY << ", " << mnMaxY << "]" << endl;
+
+    // cv::Mat tmp(1,2,CV_32F);
+    // // tmp.at<float>(0,0)=(imLeft.cols/2); tmp.at<float>(0,1)=(imLeft.rows/2);
+    // tmp.at<float>(0,0)=0; 
+    // tmp.at<float>(0,1)=0;
+    // cout << "Before " << endl << tmp << endl;
+    // tmp=tmp.reshape(2);
+    // cout << "Before " << endl << tmp << endl;
+    // // cv::fisheye::undistortPoints(mat,mat,mK,mDistCoef,cv::Mat(),mK);
+    // cv::fisheye::undistortPoints(tmp,tmp,mK,mDistCoef,cv::Mat(),mK);
+    // cout << "tmp: " << endl << tmp << endl;    
+    // tmp=tmp.reshape(1);
+    // cout << "tmp: " << endl << tmp << endl;    
+}
+
 
 void Frame::ComputeStereoMatches()
 {
@@ -677,6 +861,80 @@ cv::Mat Frame::UnprojectStereo(const int &i)
     }
     else
         return cv::Mat();
+}
+
+// void Frame::unsdistortFish(std::vector<cv::KeyPoint> distorted, std::vector<cv::KeyPoint>& undistorted, cv::Mat K, cv::Mat D, cv::Mat R, cv::Mat P)
+void Frame::undistortFish(cv::InputArray distorted, cv::OutputArray& undistorted, cv::Mat K, cv::Mat D)
+{
+    // undistorted = distorted;
+    const float threshold = 3.14159 - 0.2;
+    size_t n = distorted.total();
+
+    const cv::Vec2f* srcDistorted = distorted.getMat().ptr<cv::Vec2f>();
+    cv::Vec2f* srcUndistorted = undistorted.getMat().ptr<cv::Vec2f>();
+
+    for (size_t i = 0; i < n; i++)
+    {
+        float x = srcDistorted[i][0];
+        float y = srcDistorted[i][1];
+
+        cv::Vec2f pw((x - cx)/fx, (y - cy)/fy);
+
+        double theta_d = sqrt(pw[0]*pw[0] + pw[1]*pw[1]);
+
+        if(theta_d > threshold)
+        {
+            cv::Vec2f fi(0,0);
+            srcUndistorted[i] = fi;
+            // cout << theta_d << " " << threshold << " " << x << " " << y << endl;
+            // cout << srcDistorted[i][0] << " " << srcDistorted[i][1] << " " << pw[0] << " " << pw[1] << endl;
+            continue;
+        }
+
+        double scale = 1.0;
+        double theta = theta_d;
+
+        if (theta_d > 0.00000001)
+        {
+            
+            for(int j=0; j< 10; j++)
+            {
+              double theta2 = theta*theta;
+              double theta4 = theta2*theta2;
+              double theta6 = theta2*theta4;
+              double theta8 = theta4*theta4;
+
+              double k0_theta2 = mDistCoef.at<float>(0)*theta2;
+              double k1_theta4 = mDistCoef.at<float>(1)*theta4;
+              double k2_theta6 = mDistCoef.at<float>(2)*theta6;
+              double k3_theta8 = mDistCoef.at<float>(3)*theta8;
+
+              double theta_fix = (theta* (1 + k0_theta2 + k1_theta4 + k2_theta6 + k3_theta8) - theta_d)/
+                          (1 + 3*k0_theta2 + 5*k1_theta4 + 7*k2_theta6 + 9*k3_theta8);
+              theta = theta - theta_fix;
+              if (fabs(theta_fix) < 0.00000001)
+              {
+                break;
+              }
+            }
+        }
+
+        scale = tan(theta) / theta_d;
+
+        cv::Vec2f pi = pw * (float)scale;
+        pi[0] = pi[0]*fx + cx;
+        pi[1] = pi[1]*fy + cy;
+        srcUndistorted[i] = pi;
+        // cout << scale << "  \t" << srcDistorted[i] << "\t" << srcUndistorted[i] << endl;
+    }
+
+    // cout << "Working: " << n << endl;
+    // cout << "fx: " << Frame::fx << endl;
+    // cout << "fy: " << Frame::fy << endl;
+    // cout << "cx: " << Frame::cx << endl;
+    // cout << "cy: " << Frame::cy << endl;
+
+    // srcUndistorted = 
 }
 
 } //namespace ORB_SLAM

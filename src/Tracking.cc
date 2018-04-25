@@ -76,6 +76,24 @@ Tracking::Tracking(System *pSys, ORBVocabulary* pVoc, FrameDrawer *pFrameDrawer,
     }
     DistCoef.copyTo(mDistCoef);
 
+     float n_fx, n_fy, n_cx, n_cy;
+    if(sensor==System::FISHEYE)
+    {
+        n_fx = fSettings["newK.fx"];
+        n_fy = fSettings["newK.fy"];
+        n_cx = fSettings["newK.cx"];
+        n_cy = fSettings["newK.cy"];
+
+        cout << "FAAAK" << n_fx << endl;
+
+        cv::Mat n_K = cv::Mat::eye(3,3,CV_32F);
+        n_K.at<float>(0,0) = n_fx;
+        n_K.at<float>(1,1) = n_fy;
+        n_K.at<float>(0,2) = n_cx;
+        n_K.at<float>(1,2) = n_cy;
+        n_K.copyTo(n_mK);
+    }
+
     mbf = fSettings["Camera.bf"];
 
     float fps = fSettings["Camera.fps"];
@@ -97,6 +115,14 @@ Tracking::Tracking(System *pSys, ORBVocabulary* pVoc, FrameDrawer *pFrameDrawer,
         cout << "- k3: " << DistCoef.at<float>(4) << endl;
     cout << "- p1: " << DistCoef.at<float>(2) << endl;
     cout << "- p2: " << DistCoef.at<float>(3) << endl;
+
+    if(sensor==System::FISHEYE)
+    {
+        cout << "- new_fx: " << n_fx << endl;
+        cout << "- new_fy: " << n_fy << endl;
+        cout << "- new_cx: " << n_cx << endl;
+        cout << "- new_cy: " << n_cy << endl;
+    }
     cout << "- fps: " << fps << endl;
 
 
@@ -121,7 +147,7 @@ Tracking::Tracking(System *pSys, ORBVocabulary* pVoc, FrameDrawer *pFrameDrawer,
     if(sensor==System::STEREO)
         mpORBextractorRight = new ORBextractor(nFeatures,fScaleFactor,nLevels,fIniThFAST,fMinThFAST);
 
-    if(sensor==System::MONOCULAR)
+    if(sensor==System::MONOCULAR || sensor==System::FISHEYE)
         mpIniORBextractor = new ORBextractor(2*nFeatures,fScaleFactor,nLevels,fIniThFAST,fMinThFAST);
 
     cout << endl  << "ORB Extractor Parameters: " << endl;
@@ -258,6 +284,35 @@ cv::Mat Tracking::GrabImageMonocular(const cv::Mat &im, const double &timestamp)
         mCurrentFrame = Frame(mImGray,timestamp,mpIniORBextractor,mpORBVocabulary,mK,mDistCoef,mbf,mThDepth);
     else
         mCurrentFrame = Frame(mImGray,timestamp,mpORBextractorLeft,mpORBVocabulary,mK,mDistCoef,mbf,mThDepth);
+
+    Track();
+
+    return mCurrentFrame.mTcw.clone();
+}
+
+cv::Mat Tracking::GrabImageFisheye(const cv::Mat &im, const double &timestamp)
+{
+    mImGray = im;
+
+    if(mImGray.channels()==3)
+    {
+        if(mbRGB)
+            cvtColor(mImGray,mImGray,CV_RGB2GRAY);
+        else
+            cvtColor(mImGray,mImGray,CV_BGR2GRAY);
+    }
+    else if(mImGray.channels()==4)
+    {
+        if(mbRGB)
+            cvtColor(mImGray,mImGray,CV_RGBA2GRAY);
+        else
+            cvtColor(mImGray,mImGray,CV_BGRA2GRAY);
+    }
+
+    if(mState==NOT_INITIALIZED || mState==NO_IMAGES_YET)
+        mCurrentFrame = Frame(mImGray,timestamp,mpIniORBextractor,mpORBVocabulary,mK,n_mK,mDistCoef,mbf,mThDepth,mSensor);
+    else
+        mCurrentFrame = Frame(mImGray,timestamp,mpORBextractorLeft,mpORBVocabulary,mK,n_mK,mDistCoef,mbf,mThDepth,mSensor);
 
     Track();
 
@@ -565,6 +620,7 @@ void Tracking::MonocularInitialization()
 
     if(!mpInitializer)
     {
+        cout << "mvKeys.size(): " << mCurrentFrame.mvKeys.size() << endl;
         // Set Reference Frame
         if(mCurrentFrame.mvKeys.size()>100)
         {
@@ -598,6 +654,7 @@ void Tracking::MonocularInitialization()
         // Find correspondences
         ORBmatcher matcher(0.9,true);
         int nmatches = matcher.SearchForInitialization(mInitialFrame,mCurrentFrame,mvbPrevMatched,mvIniMatches,100);
+        cout << "matches: " << nmatches << endl;
 
         // Check if there are enough correspondences
         if(nmatches<100)
@@ -806,7 +863,7 @@ void Tracking::UpdateLastFrame()
 
     mLastFrame.SetPose(Tlr*pRef->GetPose());
 
-    if(mnLastKeyFrameId==mLastFrame.mnId || mSensor==System::MONOCULAR || !mbOnlyTracking)
+    if(mnLastKeyFrameId==mLastFrame.mnId || mSensor==System::MONOCULAR || mSensor==System::FISHEYE || !mbOnlyTracking)
         return;
 
     // Create "visual odometry" MapPoints
@@ -882,13 +939,13 @@ bool Tracking::TrackWithMotionModel()
         th=15;
     else
         th=7;
-    int nmatches = matcher.SearchByProjection(mCurrentFrame,mLastFrame,th,mSensor==System::MONOCULAR);
+    int nmatches = matcher.SearchByProjection(mCurrentFrame,mLastFrame,th,(mSensor==System::MONOCULAR || mSensor==System::FISHEYE));
 
     // If few matches, uses a wider window search
     if(nmatches<20)
     {
         fill(mCurrentFrame.mvpMapPoints.begin(),mCurrentFrame.mvpMapPoints.end(),static_cast<MapPoint*>(NULL));
-        nmatches = matcher.SearchByProjection(mCurrentFrame,mLastFrame,2*th,mSensor==System::MONOCULAR);
+        nmatches = matcher.SearchByProjection(mCurrentFrame,mLastFrame,2*th,(mSensor==System::MONOCULAR || mSensor==System::FISHEYE));
     }
 
     if(nmatches<20)
@@ -1001,7 +1058,7 @@ bool Tracking::NeedNewKeyFrame()
     // Check how many "close" points are being tracked and how many could be potentially created.
     int nNonTrackedClose = 0;
     int nTrackedClose= 0;
-    if(mSensor!=System::MONOCULAR)
+    if((mSensor!=System::MONOCULAR || mSensor!=System::FISHEYE))
     {
         for(int i =0; i<mCurrentFrame.N; i++)
         {
@@ -1022,7 +1079,7 @@ bool Tracking::NeedNewKeyFrame()
     if(nKFs<2)
         thRefRatio = 0.4f;
 
-    if(mSensor==System::MONOCULAR)
+    if((mSensor==System::MONOCULAR || mSensor==System::FISHEYE))
         thRefRatio = 0.9f;
 
     // Condition 1a: More than "MaxFrames" have passed from last keyframe insertion
@@ -1030,7 +1087,7 @@ bool Tracking::NeedNewKeyFrame()
     // Condition 1b: More than "MinFrames" have passed and Local Mapping is idle
     const bool c1b = (mCurrentFrame.mnId>=mnLastKeyFrameId+mMinFrames && bLocalMappingIdle);
     //Condition 1c: tracking is weak
-    const bool c1c =  mSensor!=System::MONOCULAR && (mnMatchesInliers<nRefMatches*0.25 || bNeedToInsertClose) ;
+    const bool c1c =  (mSensor!=System::MONOCULAR || mSensor!=System::FISHEYE) && (mnMatchesInliers<nRefMatches*0.25 || bNeedToInsertClose) ;
     // Condition 2: Few tracked points compared to reference keyframe. Lots of visual odometry compared to map matches.
     const bool c2 = ((mnMatchesInliers<nRefMatches*thRefRatio|| bNeedToInsertClose) && mnMatchesInliers>15);
 
@@ -1045,7 +1102,7 @@ bool Tracking::NeedNewKeyFrame()
         else
         {
             mpLocalMapper->InterruptBA();
-            if(mSensor!=System::MONOCULAR)
+            if((mSensor!=System::MONOCULAR || mSensor!=System::FISHEYE))
             {
                 if(mpLocalMapper->KeyframesInQueue()<3)
                     return true;
@@ -1070,7 +1127,7 @@ void Tracking::CreateNewKeyFrame()
     mpReferenceKF = pKF;
     mCurrentFrame.mpReferenceKF = pKF;
 
-    if(mSensor!=System::MONOCULAR)
+    if((mSensor!=System::MONOCULAR || mSensor!=System::FISHEYE))
     {
         mCurrentFrame.UpdatePoseMatrices();
 
