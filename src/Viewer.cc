@@ -117,7 +117,7 @@ void Viewer::Run()
     pangolin::OpenGlMatrix Twc;
     Twc.SetIdentity();
 
-    cv::namedWindow("ORB-SLAM2: Current Frame");
+    // cv::namedWindow("ORB-SLAM2: Current Frame");
 
     bool bFollow = true;
     bool bLocalizationMode = false;
@@ -125,7 +125,7 @@ void Viewer::Run()
     // Save Video ---------------------------------------------------------------------------------
     cv::VideoWriter video("sampleViewer.avi",CV_FOURCC('M','J','P','G'),1e3/mT, cv::Size(mImageWidth+pangoWidth,mImageHeight+20),true);
     // Save Video ---------------------------------------------------------------------------------
-
+    unsigned long int f = 0;
 
     while(1)
     {
@@ -185,27 +185,33 @@ void Viewer::Run()
         cv:: Mat flipPoint;
         cv::flip(pointImg, flipPoint, 0);
 
-        if(im.rows != mImageHeight+20)
+        if(f != mpTracker->mCurrentFrame.mnId)
         {
-             cv::Mat temp(mImageHeight+20, mImageWidth, CV_8UC3, cv::Scalar(0,0,0));
-             im = temp;
-             cout << "Image not rendered" << endl;
-        }
+            f = mpTracker->mCurrentFrame.mnId;
 
-        if(useBlack)
-        {
-            cv::Mat tmp;
-            cv::vconcat(flipPoint,bottomCorn,tmp);
-            hconcat(tmp,im,combi);
-        }
-        else
-        {
-            hconcat(flipPoint,im,combi);
-        }
+            if(im.rows != mImageHeight+20)
+            {
+                 cv::Mat temp(mImageHeight+20, mImageWidth, CV_8UC3, cv::Scalar(0,0,0));
+                 im = temp;
+                 cout << "Image not rendered" << endl;
+            }
 
-        cv::imshow("ORB-SLAM2: Current Frame",im);
+            if(useBlack)
+            {
+                cv::Mat tmp;
+                cv::vconcat(flipPoint,bottomCorn,tmp);
+                hconcat(tmp,im,combi);
+            }
+            else
+            {
+                hconcat(flipPoint,im,combi);
+            }
 
-        video.write(combi);
+            // cv::imshow("ORB-SLAM2: Current Frame",im);
+
+            video.write(combi);
+        }  
+
         cv::waitKey(mT);
 
         if(menuReset)

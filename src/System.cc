@@ -566,4 +566,10 @@ vector<cv::KeyPoint> System::GetTrackedKeyPointsUn()
     return mTrackedKeyPointsUn;
 }
 
+int System::GetTotalMapPoints()
+{
+    int nMPs = mpMap->MapPointsInMap();
+    return nMPs;
+}
+
 } //namespace ORB_SLAM

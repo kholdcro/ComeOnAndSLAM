@@ -32,21 +32,31 @@
 using namespace std;
 
 void LoadImages(const string &strSequence, vector<string> &vstrImageFilenames,
-                vector<double> &vTimestamps);
+                vector<double> &vTimestamps, int subinterval);
+void saveTrackTimes(const string &filename);
 
 int main(int argc, char **argv)
 {
-    if(argc != 5)
+    if(argc <= 5)
     {
-        cerr << endl << "Usage: ./widefisheye path_to_vocabulary path_to_settings path_to_sequence useFisheye(bool)" << endl;
+        cerr << endl << "Usage: ./widefisheye path_to_vocabulary path_to_settings path_to_sequence useFisheye(bool) subframes" << endl;
         return 1;
     }
+
+    int subinterval;
+    if(argc <= 6)
+        subinterval = atoi(argv[5]);// - char()'0';
+    else
+        subinterval = 1;
+
+    cout << "Interval" << subinterval << endl;
 
     // Retrieve paths to images
     vector<string> vstrImageFilenames;
     vector<double> vTimestamps;
-    LoadImages(string(argv[3]), vstrImageFilenames, vTimestamps);
-
+    cout << "derp1" << endl;
+    LoadImages(string(argv[3]), vstrImageFilenames, vTimestamps, subinterval);
+    cout << "derp2" << endl;
     int nImages = vstrImageFilenames.size();
 
     ORB_SLAM2::System::eSensor sensor;
@@ -54,12 +64,16 @@ int main(int argc, char **argv)
         sensor = ORB_SLAM2::System::FISHEYE;
     else
         sensor = ORB_SLAM2::System::MONOCULAR;
+    cout << "derp3" << endl;
     // Create SLAM system. It initializes all system threads and gets ready to process frames.
     ORB_SLAM2::System SLAM(argv[1],argv[2],sensor,true);
-
+    cout << "derp4" << endl;
     // Vector for tracking time statistics
     vector<float> vTimesTrack;
     vTimesTrack.resize(nImages);
+
+    vector<int> trackState;
+    trackState.resize(nImages);
 
     cout << endl << "-------" << endl;
     cout << "Start processing sequence ..." << endl;
@@ -73,6 +87,8 @@ int main(int argc, char **argv)
     cv::Mat im;
     for(int ni=0; ni<nImages; ni++)
     {
+        if(ni % subinterval != 0)
+            continue;
         // Read image from file
         im = cv::imread(vstrImageFilenames[ni],CV_LOAD_IMAGE_UNCHANGED);
         double tframe = vTimestamps[ni];
@@ -90,7 +106,7 @@ int main(int argc, char **argv)
 #endif
 
         // Pass the image to the SLAM system
-        if(argv[4])
+        if(string(argv[4]) == "true")
             SLAM.TrackFisheye(im,tframe);
         else
             SLAM.TrackMonocular(im,tframe);
@@ -112,9 +128,13 @@ int main(int argc, char **argv)
         else if(ni>0)
             T = tframe-vTimestamps[ni-1];
 
+        trackState[ni] = SLAM.GetTrackingState();
+
+        // cout << "Thing: " << SLAM.GetTotalMapPoints() << endl;
+
         if(ttrack<T)
             usleep((T-ttrack)*1e6);
-        cout << "Frame: " << ni << endl;
+        cout << "Frame: " << ni << "\tState: " << trackState[ni] << endl;
     }
 
     cout << "Exiting SLAM..." << endl;
@@ -132,14 +152,40 @@ int main(int argc, char **argv)
     cout << "-------" << endl << endl;
     cout << "median tracking time: " << vTimesTrack[nImages/2] << endl;
     cout << "mean tracking time: " << totaltime/nImages << endl;
+    cout << nImages << endl;
+    cout << vTimesTrack[97] << endl;
+    cout << vTimesTrack[98] << endl;
+    cout << vTimesTrack[99] << endl;
+    cout << vTimesTrack[100] << endl;
+    cout << "Thinger: " << SLAM.GetTotalMapPoints() << endl;
 
     // Save camera trajectory
-    SLAM.SaveKeyFrameTrajectoryTUM("KeyFrameTrajectory.txt");    
+    SLAM.SaveKeyFrameTrajectoryTUM(string(argv[3])+"/KeyFrameTrajectory.txt");
 
+    ofstream g;
+    g.open((string(argv[3])+"/stateFrames.txt").c_str());
+    for(int ni=0; ni<nImages; ni++)
+    {
+        g << trackState[ni] << endl;
+    }
+    g.close();
+    
+    ofstream f;
+    f.open((string(argv[3])+"/trackPercentage.txt").c_str());
+    f << fixed;
+    f << "median tracking time: " << vTimesTrack[nImages/2] << "\n" << endl;
+    f << "mean tracking time: " << totaltime/nImages << "\n" << endl;
+    f << "Average tracking time: " << totaltime/vTimestamps[nImages-1] << "\n" << endl;
+    f << "Total tracking time: " << totaltime << "\n" << endl;
+    f << "Total time: " << vTimestamps[nImages-1] << "\n" << endl;
+    f << "Number of images: " << nImages << "\n" << endl;
+    f << "Total Map Points: " << SLAM.GetTotalMapPoints() << "\n" << endl; 
+    f << "-------";
+    f.close();
     return 0;
 }
 
-void LoadImages(const string &strPathToSequence, vector<string> &vstrImageFilenames, vector<double> &vTimestamps)
+void LoadImages(const string &strPathToSequence, vector<string> &vstrImageFilenames, vector<double> &vTimestamps, int subinterval)
 {
     ifstream fTimes;
     string strPathTimeFile = strPathToSequence + "/times.txt";
@@ -165,11 +211,15 @@ void LoadImages(const string &strPathToSequence, vector<string> &vstrImageFilena
 
     for(int i=0; i<nTimes; i++)
     {
+        if(i % subinterval != 0)
+        {
+            continue;
+        }
         // stringstream ss;
         // ss << setfill('0') << setw(6) << i;
         // cout << strPrefixLeft + ss.str() + ".jpg" << endl;
         // cout << strPrefixLeft + to_string(i+230) + ".jpg" << endl;
-        vstrImageFilenames[i] = strPrefixLeft +  to_string(i+230) + ".jpg";
+        vstrImageFilenames[i] = strPrefixLeft +  to_string(i) + ".jpg";
         // vstrImageFilenames[i] = strPrefixLeft +  to_string(i) + ".jpg";
     }
 }

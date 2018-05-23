@@ -620,7 +620,7 @@ void Tracking::MonocularInitialization()
 
     if(!mpInitializer)
     {
-        cout << "mvKeys.size(): " << mCurrentFrame.mvKeys.size() << endl;
+        // cout << "mvKeys.size(): " << mCurrentFrame.mvKeys.size() << endl;
         // Set Reference Frame
         if(mCurrentFrame.mvKeys.size()>100)
         {
@@ -654,7 +654,7 @@ void Tracking::MonocularInitialization()
         // Find correspondences
         ORBmatcher matcher(0.9,true);
         int nmatches = matcher.SearchForInitialization(mInitialFrame,mCurrentFrame,mvbPrevMatched,mvIniMatches,100);
-        cout << "matches: " << nmatches << endl;
+        // cout << "matches: " << nmatches << endl;
 
         // Check if there are enough correspondences
         if(nmatches<100)
@@ -1229,7 +1229,8 @@ void Tracking::SearchLocalPoints()
         if(pMP->isBad())
             continue;
         // Project (this fills MapPoint variables for matching)
-        if(mCurrentFrame.isInFrustum(pMP,0.5))
+        // if(mCurrentFrame.isInFrustum(pMP,0.5))
+        if(mCurrentFrame.isInFrustum(pMP,0.0))
         {
             pMP->IncreaseVisible();
             nToMatch++;

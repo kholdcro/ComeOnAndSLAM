@@ -379,8 +379,10 @@ bool Frame::isInFrustum(MapPoint *pMP, float viewingCosLimit)
 
     const float viewCos = PO.dot(Pn)/dist;
 
-    // if(viewCos<viewingCosLimit)
-    //     return false;
+    // cout << "\t\t viewCos:" << viewCos << endl;
+
+    if(viewCos<viewingCosLimit)
+        return false;
 
     // Predict scale in the image
     const int nPredictedLevel = pMP->PredictScale(dist,this);
@@ -867,7 +869,8 @@ cv::Mat Frame::UnprojectStereo(const int &i)
 void Frame::undistortFish(cv::InputArray distorted, cv::OutputArray& undistorted, cv::Mat K, cv::Mat D)
 {
     // undistorted = distorted;
-    const float threshold = 3.14159 - 0.2;
+    const float threshold = 3.14159 - 0.14;
+    // const float threshold = 3.14159/2;
     size_t n = distorted.total();
 
     const cv::Vec2f* srcDistorted = distorted.getMat().ptr<cv::Vec2f>();
@@ -882,7 +885,7 @@ void Frame::undistortFish(cv::InputArray distorted, cv::OutputArray& undistorted
 
         double theta_d = sqrt(pw[0]*pw[0] + pw[1]*pw[1]);
 
-        if(theta_d > threshold)
+        if(theta_d >= threshold)
         {
             cv::Vec2f fi(0,0);
             srcUndistorted[i] = fi;
@@ -918,6 +921,15 @@ void Frame::undistortFish(cv::InputArray distorted, cv::OutputArray& undistorted
               }
             }
         }
+
+        // if(theta >= threshold)
+        // {
+        //     cv::Vec2f fi(0,0);
+        //     srcUndistorted[i] = fi;
+        //     // cout << theta_d << " " << threshold << " " << x << " " << y << endl;
+        //     // cout << srcDistorted[i][0] << " " << srcDistorted[i][1] << " " << pw[0] << " " << pw[1] << endl;
+        //     continue;
+        // }        
 
         scale = tan(theta) / theta_d;
 
