@@ -127,6 +127,9 @@ void Viewer::Run()
     // Save Video ---------------------------------------------------------------------------------
     unsigned long int f = 0;
 
+    orbMatches = cv::Mat::zeros(cv::Size(mImageWidth,mImageHeight), CV_32FC1);
+    cv::namedWindow("ORB-SLAM2: ORB Matches");
+
     while(1)
     {
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -209,10 +212,14 @@ void Viewer::Run()
 
             // cv::imshow("ORB-SLAM2: Current Frame",im);
 
-            video.write(combi);
-        }  
+            cv::imshow("ORB-SLAM2: ORB Matches",orbMatches);
 
-        cv::waitKey(mT);
+            video.write(combi);
+        } 
+
+        orbMatches = mpFrameDrawer->updateOrbMatches(orbMatches);
+
+        cv::waitKey(mT/10);
 
         if(menuReset)
         {
@@ -303,6 +310,12 @@ void Viewer::Release()
 {
     unique_lock<mutex> lock(mMutexStop);
     mbStopped = false;
+}
+
+cv::Mat Viewer::getOrbMatches()
+{
+    cv::Mat tmp = orbMatches; 
+    return tmp;
 }
 
 }

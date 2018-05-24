@@ -56,6 +56,8 @@ public:
 
     void Release();
 
+    cv::Mat getOrbMatches();
+
 private:
 
     bool Stop();
@@ -81,6 +83,7 @@ private:
     bool mbStopRequested;
     std::mutex mMutexStop;
 
+    cv::Mat orbMatches;
 };
 
 }
