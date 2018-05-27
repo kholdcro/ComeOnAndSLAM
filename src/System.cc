@@ -572,4 +572,10 @@ int System::GetTotalMapPoints()
     return nMPs;
 }
 
+cv::Mat System::GetMatches()
+{
+    cv::Mat img = mpViewer->getOrbMatches();
+    return img;
+}
+
 } //namespace ORB_SLAM

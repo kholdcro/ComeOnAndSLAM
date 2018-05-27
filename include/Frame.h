@@ -208,7 +208,7 @@ private:
     void AssignFeaturesToGrid();
 
     // void undistortFish(std::vector<cv::KeyPoint> distorted, std::vector<cv::KeyPoint>& undistorted, cv::Mat K, cv::Mat D, cv::Mat R, cv::Mat P);
-    void undistortFish(cv::InputArray distorted, cv::OutputArray& undistorted, cv::Mat K, cv::Mat D);
+    void undistortFish(cv::InputArray distorted, cv::OutputArray& undistorted, cv::Mat K, cv::Mat D, std::vector<bool>& keeper);
 
     // Rotation, translation and camera center
     cv::Mat mRcw;

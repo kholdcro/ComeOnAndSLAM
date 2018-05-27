@@ -35,6 +35,7 @@ Initializer::Initializer(const Frame &ReferenceFrame, float sigma, int iteration
     mK = ReferenceFrame.mK.clone();
 
     mvKeys1 = ReferenceFrame.mvKeysUn;
+    // outlier = ReferenceFrame.mvbOutlier;
 
     mSigma = sigma;
     mSigma2 = sigma*sigma;
@@ -51,6 +52,12 @@ bool Initializer::Initialize(const Frame &CurrentFrame, const vector<int> &vMatc
     mvMatches12.clear();
     mvMatches12.reserve(mvKeys2.size());
     mvbMatched1.resize(mvKeys1.size());
+    // cout << "----------" << endl;
+    // cout << vMatches12.size() << endl;
+    // cout << mvbMatched1.size() << endl;
+    // cout << CurrentFrame.mvbOutlier.size() << endl;
+    // // cout << outlier.size() << endl;
+    // cout << "----------" << endl;
     for(size_t i=0, iend=vMatches12.size();i<iend; i++)
     {
         if(vMatches12[i]>=0)

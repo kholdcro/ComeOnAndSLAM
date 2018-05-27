@@ -128,7 +128,7 @@ void Viewer::Run()
     unsigned long int f = 0;
 
     orbMatches = cv::Mat::zeros(cv::Size(mImageWidth,mImageHeight), CV_32FC1);
-    cv::namedWindow("ORB-SLAM2: ORB Matches");
+    // cv::namedWindow("ORB-SLAM2: ORB Matches");
 
     while(1)
     {
@@ -212,7 +212,7 @@ void Viewer::Run()
 
             // cv::imshow("ORB-SLAM2: Current Frame",im);
 
-            cv::imshow("ORB-SLAM2: ORB Matches",orbMatches);
+            // cv::imshow("ORB-SLAM2: ORB Matches",orbMatches);
 
             video.write(combi);
         } 

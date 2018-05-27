@@ -84,8 +84,6 @@ Tracking::Tracking(System *pSys, ORBVocabulary* pVoc, FrameDrawer *pFrameDrawer,
         n_cx = fSettings["newK.cx"];
         n_cy = fSettings["newK.cy"];
 
-        cout << "FAAAK" << n_fx << endl;
-
         cv::Mat n_K = cv::Mat::eye(3,3,CV_32F);
         n_K.at<float>(0,0) = n_fx;
         n_K.at<float>(1,1) = n_fy;

@@ -48,6 +48,8 @@ public:
     // Draw last processed frame.
     cv::Mat DrawFrame();
 
+    cv::Mat updateOrbMatches(cv::Mat orbMatches);
+
 protected:
 
     void DrawTextInfo(cv::Mat &im, int nState, cv::Mat &imText);

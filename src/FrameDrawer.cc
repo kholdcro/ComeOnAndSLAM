@@ -78,10 +78,10 @@ cv::Mat FrameDrawer::DrawFrame()
     if(state==Tracking::NOT_INITIALIZED) //INITIALIZING
     {
         const int n = vCurrentKeys.size();
-        for(int i=0;i<n;i++)
-        {       
-            cv::circle(im,vCurrentKeys[i].pt,1,cv::Scalar(0,0,255),-1);
-        }
+        // for(int i=0;i<n;i++)
+        // {       
+        //     cv::circle(im,vCurrentKeys[i].pt,1,cv::Scalar(0,0,255),-1);
+        // }
         for(unsigned int i=0; i<vMatches.size(); i++)
         {
             if(vMatches[i]>=0)
@@ -204,5 +204,55 @@ void FrameDrawer::Update(Tracking *pTracker)
     }
     mState=static_cast<int>(pTracker->mLastProcessedState);
 }
+
+
+
+
+
+cv::Mat FrameDrawer::updateOrbMatches(cv::Mat orbMatches)
+{
+    vector<cv::KeyPoint> vIniKeys; // Initialization: KeyPoints in reference frame
+    vector<int> vMatches; // Initialization: correspondeces with reference keypoints
+    vector<cv::KeyPoint> vCurrentKeys; // KeyPoints in current frame
+    vector<bool> vbVO, vbMap; // Tracked MapPoints in current frame
+    // int state; // Tracking state
+
+    // {
+    //     unique_lock<mutex> lock(mMutex);
+    //     state=mState;
+    // }
+
+    if(mState==Tracking::NOT_INITIALIZED || mState==Tracking::SYSTEM_NOT_READY || mState==Tracking::LOST)
+    {
+        return orbMatches;
+    }
+
+    //Copy variables within scoped mutex
+    {
+        unique_lock<mutex> lock(mMutex);
+        vCurrentKeys = mvCurrentKeys;
+        vbVO = mvbVO;
+        vbMap = mvbMap;
+    } // destroy scoped mutex -> release mutex
+
+
+    mnTracked=0;
+    mnTrackedVO=0;
+    const int n = vCurrentKeys.size();
+    for(int i=0;i<n;i++)
+    {
+        if(vbVO[i] || vbMap[i])
+        {
+            // if(vbMap[i])
+            // {
+                orbMatches.at<float>(vCurrentKeys[i].pt.y, vCurrentKeys[i].pt.x)++;
+                // orbMatches.at<float>(vCurrentKeys[i].pt.y, vCurrentKeys[i].pt.x) = orbMatches.at<float>(vCurrentKeys[i].pt.y, vCurrentKeys[i].pt.x) + 1.;
+            // }
+        }
+    }
+
+    return orbMatches;
+}
+
 
 } //namespace ORB_SLAM

@@ -252,6 +252,7 @@ Frame::Frame(const cv::Mat &imGray, const double &timeStamp, ORBextractor* extra
     if(mvKeys.empty())
         return;
 
+    mvbOutlier = vector<bool>(N,false);
     if(mSensor == 3)
     {
         UndistortFisheyeKeyPoints();
@@ -264,7 +265,7 @@ Frame::Frame(const cv::Mat &imGray, const double &timeStamp, ORBextractor* extra
     mvDepth = vector<float>(N,-1);
 
     mvpMapPoints = vector<MapPoint*>(N,static_cast<MapPoint*>(NULL));
-    mvbOutlier = vector<bool>(N,false);
+    
 
     // This is done only for the first Frame (or after a change in the calibration)
     if(mbInitialComputations)
@@ -303,6 +304,8 @@ void Frame::AssignFeaturesToGrid()
 
     for(int i=0;i<N;i++)
     {
+        if(mvbOutlier[i])
+            continue;
         const cv::KeyPoint &kp = mvKeysUn[i];
 
         int nGridPosX, nGridPosY;
@@ -562,7 +565,8 @@ void Frame::UndistortFisheyeKeyPoints()
     // cv::fisheye::undistortPoints(mat,mat,mK,mDistCoef,cv::Mat(),n_mK);
     // cout << "mat: " << mat << endl;
     // cv::fisheye::undistortPoints(mat,mat,mK,mDistCoef,cv::Mat(),mK);
-    undistortFish(mat,mat,mK,mDistCoef);
+    std::vector<bool> keep(N, false);
+    undistortFish(mat,mat,mK,mDistCoef,keep);
     // cout << "after: " << mat << endl;
     mat=mat.reshape(1);
 
@@ -575,7 +579,21 @@ void Frame::UndistortFisheyeKeyPoints()
         kp.pt.y=mat.at<float>(i,1);
         mvKeysUn[i]=kp;
     }
+    // cout << "mvbOutlier\t" << mvbOutlier.size() << endl;
+    // cout << "keep\t" << keep.size() << endl;
+
+    mvbOutlier = keep;
+    int lmao = 0;
+
+    for(unsigned int i=0; i<mvbOutlier.size(); i++)
+    {
+        if(mvbOutlier[i])
+            lmao++;
+    }
+
+    // mvbOutlier[keep] = true; 
     // cout << "mvKeysUn: " << mat << endl;
+    // cout << "N:\t" << lmao << endl;
 }
 
 void Frame::ComputeFisheyeImageBounds(const cv::Mat &imLeft)
@@ -605,7 +623,8 @@ void Frame::ComputeFisheyeImageBounds(const cv::Mat &imLeft)
         cout << "Before " << endl << mat << endl;
         // cv::fisheye::undistortPoints(mat,mat,mK,mDistCoef,cv::Mat(),n_mK);
         // cv::fisheye::undistortPoints(mat,mat,mK,mDistCoef,cv::Mat(),mK);
-        undistortFish(mat,mat,mK,mDistCoef);
+        std::vector<bool> keep(4);
+        undistortFish(mat,mat,mK,mDistCoef, keep);
         // cv::fisheye::undistortPoints(mat,mat,mK,mDistCoef,cv::Mat::eye(3,3,CV_32F),mK);
         cout << "After: " << endl << mat << endl;
         mat=mat.reshape(1);
@@ -866,11 +885,14 @@ cv::Mat Frame::UnprojectStereo(const int &i)
 }
 
 // void Frame::unsdistortFish(std::vector<cv::KeyPoint> distorted, std::vector<cv::KeyPoint>& undistorted, cv::Mat K, cv::Mat D, cv::Mat R, cv::Mat P)
-void Frame::undistortFish(cv::InputArray distorted, cv::OutputArray& undistorted, cv::Mat K, cv::Mat D)
+void Frame::undistortFish(cv::InputArray distorted, cv::OutputArray& undistorted, cv::Mat K, cv::Mat D, std::vector<bool>& keeper)
 {
     // undistorted = distorted;
-    const float threshold = 3.14159 - 0.14;
-    // const float threshold = 3.14159/2;
+    
+    // const float threshold = 3.14159/2 - 0.0087;
+    const float threshold = M_PI/2 - 0.0087;
+    // const float threshold = 3.14159/2 - 0.8;
+    // const float threshold2 = 2*threshold;
     size_t n = distorted.total();
 
     const cv::Vec2f* srcDistorted = distorted.getMat().ptr<cv::Vec2f>();
@@ -885,10 +907,12 @@ void Frame::undistortFish(cv::InputArray distorted, cv::OutputArray& undistorted
 
         double theta_d = sqrt(pw[0]*pw[0] + pw[1]*pw[1]);
 
-        if(theta_d >= threshold)
+        if(fabs(theta_d) >= threshold)
         {
+            // cout << theta_d << " " << atan(theta_d) << endl;
             cv::Vec2f fi(0,0);
             srcUndistorted[i] = fi;
+            keeper[i] = true;
             // cout << theta_d << " " << threshold << " " << x << " " << y << endl;
             // cout << srcDistorted[i][0] << " " << srcDistorted[i][1] << " " << pw[0] << " " << pw[1] << endl;
             continue;
@@ -922,14 +946,17 @@ void Frame::undistortFish(cv::InputArray distorted, cv::OutputArray& undistorted
             }
         }
 
-        // if(theta >= threshold)
+        if(fabs(theta) >= threshold)
+        {
+            cv::Vec2f fi(0,0);
+            srcUndistorted[i] = fi;
+            keeper[i] = true;
+            continue;
+        }        
+        // if(fabs(tan(theta)) >= threshold )
         // {
-        //     cv::Vec2f fi(0,0);
-        //     srcUndistorted[i] = fi;
-        //     // cout << theta_d << " " << threshold << " " << x << " " << y << endl;
-        //     // cout << srcDistorted[i][0] << " " << srcDistorted[i][1] << " " << pw[0] << " " << pw[1] << endl;
-        //     continue;
-        // }        
+        //     keeper[i] = true;
+        // }
 
         scale = tan(theta) / theta_d;
 
@@ -937,6 +964,7 @@ void Frame::undistortFish(cv::InputArray distorted, cv::OutputArray& undistorted
         pi[0] = pi[0]*fx + cx;
         pi[1] = pi[1]*fy + cy;
         srcUndistorted[i] = pi;
+
         // cout << scale << "  \t" << srcDistorted[i] << "\t" << srcUndistorted[i] << endl;
     }
 

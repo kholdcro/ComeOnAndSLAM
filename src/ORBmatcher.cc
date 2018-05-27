@@ -417,6 +417,8 @@ int ORBmatcher::SearchForInitialization(Frame &F1, Frame &F2, vector<cv::Point2f
 
     for(size_t i1=0, iend1=F1.mvKeysUn.size(); i1<iend1; i1++)
     {
+        if(F1.mvbOutlier[i1])
+            continue;
         cv::KeyPoint kp1 = F1.mvKeysUn[i1];
         int level1 = kp1.octave;
         if(level1>0)

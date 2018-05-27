@@ -182,6 +182,25 @@ int main(int argc, char **argv)
     f << "Total Map Points: " << SLAM.GetTotalMapPoints() << "\n" << endl; 
     f << "-------";
     f.close();
+
+
+    cv::Mat orbMatches = SLAM.GetMatches();
+
+    double min, max;
+    cv::Point minLoc, maxLoc;
+    cv::minMaxLoc(orbMatches, &min, &max, &minLoc, &maxLoc);
+    cout << min << "\t\t\t" << max << endl;
+    cout << minLoc.x << " " << minLoc.y << "\t" << maxLoc.x << " " << maxLoc.y << endl;
+    // orbMatches = orbMatches/max;    
+    cv::imwrite(string(argv[3])+"orbMatches.png", orbMatches);
+
+    // cv::FileStorage fs; 
+    // fs.open(string(argv[3])+"orbMatches.xml", cv::FileStorage::WRITE); 
+    // cv::Mat orbMatches = SLAM.GetMatches();
+    // fs << "orbMatches" << orbMatches;
+    // fs.release();
+
+
     return 0;
 }
 

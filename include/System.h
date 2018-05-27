@@ -126,6 +126,7 @@ public:
     std::vector<MapPoint*> GetTrackedMapPoints();
     std::vector<cv::KeyPoint> GetTrackedKeyPointsUn();
     int GetTotalMapPoints();
+    cv::Mat GetMatches();
 
 private:
 
